@@ -1,0 +1,3 @@
+#ignore all output in the build file
+/build/
+autorun.sh

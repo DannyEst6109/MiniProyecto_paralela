@@ -3,9 +3,11 @@
 #include <omp.h>
 #include <cstdlib>
 #include <ctime>
+#include <chrono>
 
+using namespace std::chrono;
 const int GRID_SIZE = 20;
-const int TICKS = 20;
+const int TICKS = 2000;
 const int NUM_PLANTS = 150;
 const int NUM_HERBIVORES = 40;
 const int NUM_CARNIVORES = 15;
@@ -141,14 +143,16 @@ struct Ecosystem {
 };
 
 int main() {
+    
     Ecosystem ecosystem;
-
+    auto start = high_resolution_clock::now();
     for (int tick = 0; tick < TICKS; tick++) {
         std::cout << "Tick " << tick + 1 << std::endl;
         ecosystem.display();
         ecosystem.update();
         std::cout << std::endl;
     }
-
+    auto end = high_resolution_clock::now();
+    std::cout << "excecution time"<< duration_cast<microseconds>(end - start).count() << "ms" << std::endl;
     return 0;
 }
