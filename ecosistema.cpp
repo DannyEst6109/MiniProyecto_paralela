@@ -74,7 +74,35 @@ struct Ecosystem {
     }
 
     void updatePlant(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
-        if (rand() % 100 < 30) { // 30% probability to reproduce
+        //check if the plant is not surrounded by plants
+        /*
+        checks in a grid of up , down left and rigt 
+        . P . 
+        P P P 
+        . P .
+        in this case the center one should be death , becomming
+        . P . 
+        P . P 
+        . P .
+        */
+        bool surrounded = true; //assume is surrounded ( is easier to check if is not rather than if it is)
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
+                int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
+                if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE) { //avoid out of bounds checking
+                if (newGrid[newX][newY] != PLANT) {
+                    surrounded = false;
+                    break;
+                }}
+            }
+        }
+        
+        //kill the plant if surrounded
+        if (surrounded) {
+            newGrid[x][y] = EMPTY;
+        } 
+        else if (rand() % 100 < 30) { // 30% probability to reproduce
             int dx = rand() % 3 - 1;
             int dy = rand() % 3 - 1;
             int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
@@ -88,7 +116,7 @@ struct Ecosystem {
     void updateHerbivore(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
         move(x, y, newGrid, newEnergy, HERBIVORE, PLANT);
         reproduce(x, y, newGrid, newEnergy, HERBIVORE);
-        if (newEnergy[x][y] <= 0) {
+        if (newEnergy[x][y] <= 0) { 
             newGrid[x][y] = EMPTY;
         }
     }
