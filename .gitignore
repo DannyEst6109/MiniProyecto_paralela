@@ -1,0 +1,6 @@
+#ignore all output in the build file
+/build/
+autorun.sh
+ecosistema.exe
+output.txt
+.vscode

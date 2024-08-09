@@ -2,237 +2,211 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
-#include <omp.h>
 #include <chrono>
-#include <fstream>  // Para guardar los resultados en un archivo
 
-const int GRID_SIZE = 10;
-const int INITIAL_PLANTS = 150;
-const int INITIAL_HERBIVORES = 40;
-const int INITIAL_CARNIVORES = 15;
-const int TICKS = 20;
+using namespace std::chrono;
+const int GRID_SIZE = 20;
+const int TICKS = 2000;
+const int NUM_PLANTS = 150;
+const int NUM_HERBIVORES = 40;
+const int NUM_CARNIVORES = 15;
 
 enum Species { EMPTY, PLANT, HERBIVORE, CARNIVORE };
+int carnivores = 0;
+int plants = 0;
+int herbivores = 0;
 
-struct Cell {
-    Species species;
-    int energy;  // Para herbívoros y carnívoros
-    int noFoodTicks; // Contador de ticks sin comida para herbívoros
-};
+struct Ecosystem {
+    std::vector<std::vector<Cell>> grid;
+    std::vector<std::vector<int>> energy;
 
-std::vector<std::vector<Cell>> grid(GRID_SIZE, std::vector<Cell>(GRID_SIZE, { EMPTY, 0, 0 }));
+    Ecosystem() : grid(GRID_SIZE, std::vector<Cell>(GRID_SIZE, EMPTY)),
+                  energy(GRID_SIZE, std::vector<int>(GRID_SIZE, 0)) {
+        srand(time(0));
+        initialize(NUM_PLANTS, PLANT);
+        initialize(NUM_HERBIVORES, HERBIVORE);
+        initialize(NUM_CARNIVORES, CARNIVORE);
+    }
 
-void initializeGrid() {
-    srand(time(0));
-    
-    // Función para colocar especies en la cuadrícula de forma aleatoria
-    auto placeSpecies = [](Species species, int count) {
-        while (count > 0) {
+    void initialize(int num, Cell type) {
+        while (num > 0) {
             int x = rand() % GRID_SIZE;
             int y = rand() % GRID_SIZE;
-            if (grid[x][y].species == EMPTY) {
-                grid[x][y].species = species;
-                if (species == HERBIVORE || species == CARNIVORE) {
-                    grid[x][y].energy = 5;  // Energía inicial para herbívoros y carnívoros
+            if (grid[x][y] == EMPTY) {
+                grid[x][y] = type;
+                energy[x][y] = (type == HERBIVORE || type == CARNIVORE) ? 100 : 0;
+                num--;
+            }
+        }
+    }
+
+    void display() {
+        for (int i = 0; i < GRID_SIZE; i++) {
+            for (int j = 0; j < GRID_SIZE; j++) {
+                switch (grid[i][j]) {
+                    case EMPTY: std::cout << ". "; break;
+                    case PLANT: std::cout << "P " ; break;
+                    case HERBIVORE: std::cout << "H "; break;
+                    case CARNIVORE: std::cout << "C ";break;
                 }
-                count--;
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "plants: " << plants << std::endl;
+        std::cout << "carnivores: " << carnivores << std::endl;
+        std::cout << "herbivores: " << herbivores << std::endl;
+        std::cout << std::endl;
+    }
+
+    void update() {
+        std::vector<std::vector<Cell>> newGrid = grid;
+        std::vector<std::vector<int>> newEnergy = energy;
+
+        carnivores = 0;
+        plants = 0;
+        herbivores = 0;
+        int j;
+        int i;
+        #pragma omp parallel for private(j) collapse(2) num_threads(5)
+        for ( i = 0; i < GRID_SIZE; i++) {
+            for (j = 0; j < GRID_SIZE; j++) {
+                
+                if (grid[i][j] == PLANT) {
+                    updatePlant(i, j, newGrid, newEnergy);
+                    #pragma omp atomic
+                    plants ++;
+                } else if (grid[i][j] == HERBIVORE) {
+                    updateHerbivore(i, j, newGrid, newEnergy);
+                    #pragma omp atomic
+                    herbivores ++;
+                } else if (grid[i][j] == CARNIVORE) {
+                    updateCarnivore(i, j, newGrid, newEnergy);
+                    #pragma omp atomic
+                    carnivores ++;
+                }
             }
         }
-    };
 
-    // Inicialización de plantas, herbívoros y carnívoros
-    placeSpecies(PLANT, INITIAL_PLANTS);
-    placeSpecies(HERBIVORE, INITIAL_HERBIVORES);
-    placeSpecies(CARNIVORE, INITIAL_CARNIVORES);
-}
+        // Update global counters using atomic operations
+       
 
-// Función para imprimir la cuadrícula en la consola
-void printGrid(int tick, std::ofstream &outputFile) {
-    outputFile << "Tick " << tick << ":\n";
-    for (int i = 0; i < GRID_SIZE; ++i) {
-        for (int j = 0; j < GRID_SIZE; ++j) {
-            char c = ' ';
-            switch (grid[i][j].species) {
-                case PLANT: c = 'P'; break;
-                case HERBIVORE: c = 'H'; break;
-                case CARNIVORE: c = 'C'; break;
-                case EMPTY: c = '.'; break;
-            }
-            outputFile << c << ' ';
-        }
-        outputFile << '\n';
+        grid = newGrid;
+        energy = newEnergy;
     }
-    outputFile << "\n";
-}
 
-// Función para mover a un herbívoro o carnívoro
-void move(int x, int y, Species species) {
-    int newX = x + (rand() % 3 - 1);
-    int newY = y + (rand() % 3 - 1);
-    if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE) {
-        if (grid[newX][newY].species == EMPTY) {
-            grid[newX][newY] = grid[x][y];
-            grid[x][y].species = EMPTY;
-        }
-    }
-}
-
-// Función para actualizar el estado de un herbívoro
-void updateHerbivore(int x, int y) {
-    bool ate = false;
-    // Buscar plantas adyacentes
-    for (int dx = -1; dx <= 1; ++dx) {
-        for (int dy = -1; dy <= 1; ++dy) {
-            int nx = x + dx;
-            int ny = y + dy;
-            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                if (grid[nx][ny].species == PLANT) {
-                    grid[nx][ny].species = EMPTY;  // Comer la planta
-                    grid[x][y].energy++;
-                    ate = true;
-                    grid[x][y].noFoodTicks = 0;  // Resetear el contador de ticks sin comida
+    void updatePlant(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
+        //check if the plant is not surrounded by plants, must have at least 4 free spaces
+        /*
+        checks in a grid of 3x3 sourrinding the current plant
+        P P P 
+        P Pc P 
+        P P P
+        in this case the center one is the current , should be death , becomming
+        P P P 
+        P . P 
+        P P P
+        */
+        //assume is surrounded ( is easier to check if is not rather than if it is)
+        bool decay = true;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
+                int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
+                if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE) { //avoid out of bounds checking
+                if (newGrid[newX][newY] != PLANT) {
+                    decay = false;
                     break;
-                }
+                }}
+            }
+        }
+        
+        //kill the plant if surrounded
+        if (decay) {
+            newGrid[x][y] = EMPTY;
+        } 
+        else if (rand() % 100 < 30) { // 30% probability to reproduce
+            int dx = rand() % 3 - 1;
+            int dy = rand() % 3 - 1;
+            int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
+            int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
+            if (newGrid[newX][newY] == EMPTY) {
+                newGrid[newX][newY] = PLANT;
             }
         }
     }
-    if (!ate) {
-        move(x, y, HERBIVORE);
-        grid[x][y].energy--;
-        grid[x][y].noFoodTicks++;  // Incrementar el contador de ticks sin comida
+
+    void updateHerbivore(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
+        move(x, y, newGrid, newEnergy, HERBIVORE, PLANT);
+        reproduce(x, y, newGrid, newEnergy, HERBIVORE);
+        if (newEnergy[x][y] <= 0) { 
+            newGrid[x][y] = EMPTY;
+        }
     }
 
-    if (grid[x][y].energy <= 0 || grid[x][y].noFoodTicks >= 3) {
-        grid[x][y].species = EMPTY;  // El herbívoro muere por falta de comida
+    void updateCarnivore(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
+        std::pair<int,int> newPos = move(x, y, newGrid, newEnergy, CARNIVORE, HERBIVORE);
+        reproduce(newPos.first, newPos.second, newGrid, newEnergy, CARNIVORE);
+        if (newEnergy[newPos.first][newPos.second] <= 0) {
+            newEnergy[newPos.first][newPos.second] = EMPTY;
+        }
     }
-}
 
-// Función para actualizar el estado de un carnívoro
-void updateCarnivore(int x, int y) {
-    bool ate = false;
-    // Buscar herbívoros adyacentes
-    for (int dx = -1; dx <= 1; ++dx) {
-        for (int dy = -1; ++dy) {
-            int nx = x + dx;
-            int ny = y + dy;
-            if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                if (grid[nx][ny].species == HERBIVORE) {
-                    grid[nx][ny].species = EMPTY;  // Comer el herbívoro
-                    grid[x][y].energy += 2;
-                    ate = true;
-                    break;
+    std::pair<int, int> move(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy, Cell type, Cell prey) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
+                int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
+                if (grid[newX][newY] == prey) {
+                    newGrid[newX][newY] = type;
+                    newEnergy[newX][newY] = newEnergy[x][y] + (type == HERBIVORE ? 3 : 2);
+                    newGrid[x][y] = EMPTY;
+                    newEnergy[x][y] = 0;
+                    return {newX, newY};
                 }
             }
         }
-    }
-    if (!ate) {
-        move(x, y, CARNIVORE);
-        grid[x][y].energy--;
-    }
-
-    if (grid[x][y].energy <= 0) {
-        grid[x][y].species = EMPTY;  // El carnívoro muere por falta de comida
-    }
-}
-
-void runSimulation(bool useOpenMP) {
-    initializeGrid();
-
-    // Abrir un archivo para registrar los resultados
-    std::ofstream outputFile("ecosystem_simulation.txt");
-    if (!outputFile.is_open()) {
-        std::cerr << "No se pudo abrir el archivo para escribir los resultados.\n";
-        return;
+        int dx = rand() % 3 - 1;
+        int dy = rand() % 3 - 1;
+        int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
+        int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
+        if (newGrid[newX][newY] == EMPTY) {
+            newGrid[newX][newY] = type;
+            newEnergy[newX][newY] = newEnergy[x][y] - 1; //energy decay
+            newGrid[x][y] = EMPTY;
+            newEnergy[x][y] = 0;
+            return {newX,newY};
+        }
+        return {x,y};
     }
 
-    auto start = std::chrono::high_resolution_clock::now(); // Iniciar medición del tiempo
-
-    for (int tick = 1; tick <= TICKS; ++tick) {
-        if (useOpenMP) {
-            #pragma omp parallel for
-            for (int i = 0; i < GRID_SIZE; ++i) {
-                for (int j = 0; j < GRID_SIZE; ++j) {
-                    switch (grid[i][j].species) {
-                        case PLANT:
-                            // Reproducción de plantas con probabilidad del 30%
-                            if (rand() % 100 < 30) {
-                                for (int dx = -1; dx <= 1; ++dx) {
-                                    for (int dy = -1; dy <= 1; ++dy) {
-                                        int nx = i + dx;
-                                        int ny = j + dy;
-                                        if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                                            if (grid[nx][ny].species == EMPTY) {
-                                                grid[nx][ny].species = PLANT;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                        case HERBIVORE:
-                            updateHerbivore(i, j);
-                            break;
-                        case CARNIVORE:
-                            updateCarnivore(i, j);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-        } else {
-            // Código secuencial sin OpenMP
-            for (int i = 0; i < GRID_SIZE; ++i) {
-                for (int j = 0; j < GRID_SIZE; ++j) {
-                    switch (grid[i][j].species) {
-                        case PLANT:
-                            // Reproducción de plantas con probabilidad del 30%
-                            if (rand() % 100 < 30) {
-                                for (int dx = -1; dx <= 1; ++dx) {
-                                    for (int dy = -1; dy <= 1; ++dy) {
-                                        int nx = i + dx;
-                                        int ny = j + dy;
-                                        if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
-                                            if (grid[nx][ny].species == EMPTY) {
-                                                grid[nx][ny].species = PLANT;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                        case HERBIVORE:
-                            updateHerbivore(i, j);
-                            break;
-                        case CARNIVORE:
-                            updateCarnivore(i, j);
-                            break;
-                        default:
-                            break;
-                    }
-                }
+    void reproduce(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy, Cell type) {
+        if (newEnergy[x][y] > 3 && rand() % 100 < 30) { // 30% probability to reproduce if enough energy
+            bool placed = false;
+            int dx = rand() % 3 - 1;
+            int dy = rand() % 3 - 1;
+            int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
+            int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
+            if (newGrid[newX][newY] == EMPTY) {
+                newGrid[newX][newY] = type;
+                newEnergy[newX][newY] = 100;
+                newEnergy[x][y] -= 4;
+                placed = true;
             }
         }
-
-        // Mostrar el estado del ecosistema después de cada tick
-        printGrid(tick, outputFile);
     }
-
-    auto end = std::chrono::high_resolution_clock::now(); // Finalizar medición del tiempo
-    std::chrono::duration<double> duration = end - start;
-    std::cout << "Tiempo de ejecución " << (useOpenMP ? "con" : "sin") << " OpenMP: " << duration.count() << " segundos.\n";
-
-    outputFile.close();
-}
+};
 
 int main() {
-    std::cout << "Ejecutando simulación sin OpenMP...\n";
-    runSimulation(false);
-
-    std::cout << "Ejecutando simulación con OpenMP...\n";
-    runSimulation(true);
-
+    
+    Ecosystem ecosystem;
+    auto start = high_resolution_clock::now();
+    for (int tick = 0; tick < TICKS; tick++) {
+        std::cout << "Tick " << tick + 1 << std::endl;
+        ecosystem.display();
+        ecosystem.update();
+        std::cout << std::endl;
+    }
+    auto end = high_resolution_clock::now();
+    std::cout << "excecution time"<< duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
     return 0;
 }
