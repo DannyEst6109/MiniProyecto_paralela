@@ -146,14 +146,14 @@ struct Ecosystem {
     }
 
     void updateCarnivore(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
-        move(x, y, newGrid, newEnergy, CARNIVORE, HERBIVORE);
-        reproduce(x, y, newGrid, newEnergy, CARNIVORE);
-        if (newEnergy[x][y] <= 0) {
-            newGrid[x][y] = EMPTY;
+        std::pair<int,int> newPos = move(x, y, newGrid, newEnergy, CARNIVORE, HERBIVORE);
+        reproduce(newPos.first, newPos.second, newGrid, newEnergy, CARNIVORE);
+        if (newEnergy[newPos.first][newPos.second] <= 0) {
+            newEnergy[newPos.first][newPos.second] = EMPTY;
         }
     }
 
-    void move(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy, Cell type, Cell prey) {
+    std::pair<int, int> move(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy, Cell type, Cell prey) {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
@@ -163,7 +163,7 @@ struct Ecosystem {
                     newEnergy[newX][newY] = newEnergy[x][y] + (type == HERBIVORE ? 3 : 2);
                     newGrid[x][y] = EMPTY;
                     newEnergy[x][y] = 0;
-                    return;
+                    return {newX, newY};
                 }
             }
         }
@@ -176,7 +176,9 @@ struct Ecosystem {
             newEnergy[newX][newY] = newEnergy[x][y] - 1; //energy decay
             newGrid[x][y] = EMPTY;
             newEnergy[x][y] = 0;
+            return {newX,newY};
         }
+        return {x,y};
     }
 
     void reproduce(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy, Cell type) {
