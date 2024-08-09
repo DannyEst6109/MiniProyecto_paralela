@@ -14,6 +14,10 @@ const int NUM_CARNIVORES = 15;
 
 enum Cell { EMPTY, PLANT, HERBIVORE, CARNIVORE };
 
+int carnivores = 0;
+int plants = 0;
+int herbivores = 0;
+
 struct Ecosystem {
     std::vector<std::vector<Cell>> grid;
     std::vector<std::vector<int>> energy;
@@ -39,23 +43,20 @@ struct Ecosystem {
     }
 
     void display() {
-        int C = 0;
-        int P = 0;
-        int H = 0;
         for (int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
                 switch (grid[i][j]) {
                     case EMPTY: std::cout << ". "; break;
-                    case PLANT: std::cout << "P " ; P+=1; break;
-                    case HERBIVORE: std::cout << "H "; H+=1; break;
-                    case CARNIVORE: std::cout << "C "; C+=1; break;
+                    case PLANT: std::cout << "P " ; break;
+                    case HERBIVORE: std::cout << "H "; break;
+                    case CARNIVORE: std::cout << "C ";break;
                 }
             }
             std::cout << std::endl;
         }
-        std::cout << "plants: " << P << std::endl;
-        std::cout << "carnivores: " << C << std::endl;
-        std::cout << "herbivores: " << H << std::endl;
+        std::cout << "plants: " << plants << std::endl;
+        std::cout << "carnivores: " << carnivores << std::endl;
+        std::cout << "herbivores: " << herbivores << std::endl;
         std::cout << std::endl;
     }
 
@@ -63,18 +64,33 @@ struct Ecosystem {
         std::vector<std::vector<Cell>> newGrid = grid;
         std::vector<std::vector<int>> newEnergy = energy;
 
-        #pragma omp parallel for collapse(2)
-        for (int i = 0; i < GRID_SIZE; i++) {
-            for (int j = 0; j < GRID_SIZE; j++) {
+        carnivores = 0;
+        plants = 0;
+        herbivores = 0;
+        int j;
+        int i;
+        #pragma omp parallel for private(j) collapse(2)
+        for ( i = 0; i < GRID_SIZE; i++) {
+            for (j = 0; j < GRID_SIZE; j++) {
+                
                 if (grid[i][j] == PLANT) {
                     updatePlant(i, j, newGrid, newEnergy);
+                    #pragma omp atomic
+                    plants ++;
                 } else if (grid[i][j] == HERBIVORE) {
                     updateHerbivore(i, j, newGrid, newEnergy);
+                    #pragma omp atomic
+                    herbivores ++;
                 } else if (grid[i][j] == CARNIVORE) {
                     updateCarnivore(i, j, newGrid, newEnergy);
+                    #pragma omp atomic
+                    carnivores ++;
                 }
             }
         }
+
+        // Update global counters using atomic operations
+       
 
         grid = newGrid;
         energy = newEnergy;
@@ -191,6 +207,6 @@ int main() {
         std::cout << std::endl;
     }
     auto end = high_resolution_clock::now();
-    std::cout << "excecution time"<< duration_cast<microseconds>(end - start).count() << "ms" << std::endl;
+    std::cout << "excecution time"<< duration_cast<milliseconds>(end - start).count() << "ms" << std::endl;
     return 0;
 }
