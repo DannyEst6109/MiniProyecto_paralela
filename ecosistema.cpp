@@ -69,7 +69,7 @@ struct Ecosystem {
         herbivores = 0;
         int j;
         int i;
-        #pragma omp parallel for private(j) collapse(2)
+        #pragma omp parallel for private(j) collapse(2) num_threads(5)
         for ( i = 0; i < GRID_SIZE; i++) {
             for (j = 0; j < GRID_SIZE; j++) {
                 
