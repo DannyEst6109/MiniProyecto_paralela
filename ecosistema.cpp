@@ -32,24 +32,31 @@ struct Ecosystem {
             int y = rand() % GRID_SIZE;
             if (grid[x][y] == EMPTY) {
                 grid[x][y] = type;
-                energy[x][y] = (type == HERBIVORE || type == CARNIVORE) ? 10 : 0;
+                energy[x][y] = (type == HERBIVORE || type == CARNIVORE) ? 100 : 0;
                 num--;
             }
         }
     }
 
     void display() {
+        int C = 0;
+        int P = 0;
+        int H = 0;
         for (int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
                 switch (grid[i][j]) {
                     case EMPTY: std::cout << ". "; break;
-                    case PLANT: std::cout << "P "; break;
-                    case HERBIVORE: std::cout << "H "; break;
-                    case CARNIVORE: std::cout << "C "; break;
+                    case PLANT: std::cout << "P " ; P+=1; break;
+                    case HERBIVORE: std::cout << "H "; H+=1; break;
+                    case CARNIVORE: std::cout << "C "; C+=1; break;
                 }
             }
             std::cout << std::endl;
         }
+        std::cout << "plants: " << P << std::endl;
+        std::cout << "carnivores: " << C << std::endl;
+        std::cout << "herbivores: " << H << std::endl;
+        std::cout << std::endl;
     }
 
     void update() {
@@ -74,32 +81,33 @@ struct Ecosystem {
     }
 
     void updatePlant(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy) {
-        //check if the plant is not surrounded by plants
+        //check if the plant is not surrounded by plants, must have at least 4 free spaces
         /*
-        checks in a grid of up , down left and rigt 
-        . P . 
+        checks in a grid of 3x3 sourrinding the current plant
         P P P 
-        . P .
-        in this case the center one should be death , becomming
-        . P . 
+        P Pc P 
+        P P P
+        in this case the center one is the current , should be death , becomming
+        P P P 
         P . P 
-        . P .
+        P P P
         */
-        bool surrounded = true; //assume is surrounded ( is easier to check if is not rather than if it is)
+        //assume is surrounded ( is easier to check if is not rather than if it is)
+        bool decay = true;
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
                 int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
                 if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE) { //avoid out of bounds checking
                 if (newGrid[newX][newY] != PLANT) {
-                    surrounded = false;
+                    decay = false;
                     break;
                 }}
             }
         }
         
         //kill the plant if surrounded
-        if (surrounded) {
+        if (decay) {
             newGrid[x][y] = EMPTY;
         } 
         else if (rand() % 100 < 30) { // 30% probability to reproduce
@@ -136,7 +144,7 @@ struct Ecosystem {
                 int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
                 if (grid[newX][newY] == prey) {
                     newGrid[newX][newY] = type;
-                    newEnergy[newX][newY] = newEnergy[x][y] + (type == HERBIVORE ? 1 : 2);
+                    newEnergy[newX][newY] = newEnergy[x][y] + (type == HERBIVORE ? 3 : 2);
                     newGrid[x][y] = EMPTY;
                     newEnergy[x][y] = 0;
                     return;
@@ -149,22 +157,24 @@ struct Ecosystem {
         int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
         if (newGrid[newX][newY] == EMPTY) {
             newGrid[newX][newY] = type;
-            newEnergy[newX][newY] = newEnergy[x][y];
+            newEnergy[newX][newY] = newEnergy[x][y] - 1; //energy decay
             newGrid[x][y] = EMPTY;
             newEnergy[x][y] = 0;
         }
     }
 
     void reproduce(int x, int y, std::vector<std::vector<Cell>> &newGrid, std::vector<std::vector<int>> &newEnergy, Cell type) {
-        if (newEnergy[x][y] > 5 && rand() % 100 < 20) { // 20% probability to reproduce if enough energy
+        if (newEnergy[x][y] > 3 && rand() % 100 < 30) { // 30% probability to reproduce if enough energy
+            bool placed = false;
             int dx = rand() % 3 - 1;
             int dy = rand() % 3 - 1;
             int newX = (x + dx + GRID_SIZE) % GRID_SIZE;
             int newY = (y + dy + GRID_SIZE) % GRID_SIZE;
             if (newGrid[newX][newY] == EMPTY) {
                 newGrid[newX][newY] = type;
-                newEnergy[newX][newY] = 5;
-                newEnergy[x][y] -= 5;
+                newEnergy[newX][newY] = 100;
+                newEnergy[x][y] -= 4;
+                placed = true;
             }
         }
     }
