@@ -42,5 +42,6 @@
         "numeric": "cpp",
         "random": "cpp",
         "string": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }
