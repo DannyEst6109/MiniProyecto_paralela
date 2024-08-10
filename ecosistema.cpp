@@ -1,23 +1,20 @@
 #include <iostream>
 #include <vector>
-#include <omp.h>
 #include <cstdlib>
 #include <ctime>
 #include <chrono>
 
 using namespace std::chrono;
-const int GRID_SIZE = 20;
+const int GRID_SIZE = 60;
 const int TICKS = 2000;
-const int NUM_PLANTS = 150;
-const int NUM_HERBIVORES = 40;
-const int NUM_CARNIVORES = 15;
+const int NUM_PLANTS = 1000;
+const int NUM_HERBIVORES = 200;
+const int NUM_CARNIVORES = 40;
 
 enum Cell { EMPTY, PLANT, HERBIVORE, CARNIVORE };
-
 int carnivores = 0;
 int plants = 0;
 int herbivores = 0;
-
 struct Ecosystem {
     std::vector<std::vector<Cell>> grid;
     std::vector<std::vector<int>> energy;
@@ -69,7 +66,7 @@ struct Ecosystem {
         herbivores = 0;
         int j;
         int i;
-        #pragma omp parallel for private(j) collapse(2) num_threads(5)
+        #pragma omp parallel for private(j) collapse(2) num_threads(12)
         for ( i = 0; i < GRID_SIZE; i++) {
             for (j = 0; j < GRID_SIZE; j++) {
                 
